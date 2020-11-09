@@ -1,0 +1,107 @@
+#! /usr/bin/env python3
+
+# Cuts out selected columns from a CSV file.  The output, written to
+# stdout, is also CSV unless an output delimiter is given, in which
+# case there is no escaping mechanism and an error is raised if the
+# delimiter occurs in a column value (unless the -i option is
+# supplied).  Invoke with -h for usage.
+#
+# Greg Janee <gjanee@ucsb.edu>
+# January 2019
+
+import argparse
+import csv
+import re
+import sys
+
+def error(exception_type, exception, traceback):
+    sys.stderr.write("%s: %s\n" % (sys.argv[0], str(exception)))
+    sys.exit(1)
+sys.excepthook = error
+
+def parse_columns_specification(s):
+    def parse(spec):
+        if spec == "*": spec = "1-"
+        try:
+            m = re.match("(\d+)(-(\d+)?)?$", spec)
+            i = int(m.group(1))
+            assert i > 0
+            if m.group(2) == None:
+                j = i
+            else:
+                if m.group(3) == None:
+                    j = None
+                else:
+                    j = int(m.group(3))
+                    assert j >= i
+        except:
+            raise argparse.ArgumentTypeError(
+                "columns specification not of the form n, n-, m-n, or *"
+            )
+        return (i-1, j)
+    return [parse(spec) for spec in s.split(",")]
+
+p = argparse.ArgumentParser(
+    usage="csvcut [-h] -f COLUMNS [-d DELIMITER] [-i] [files ...]",
+    description=(
+        "Cuts out selected columns from a CSV file.  The output, "
+        "written to stdout, is also CSV unless an output delimiter is "
+        "given, in which case there is no escaping mechanism and an "
+        "error is raised if the delimiter occurs in a column value "
+        "(unless the -i option is supplied)."
+    )
+)
+p.add_argument(
+    "-f",
+    metavar="COLUMNS",
+    dest="columns",
+    action="append",
+    default=[],
+    required=True,
+    help=(
+        "columns to output, repeatable: "
+        "n (single column), "
+        "m-n (column range), "
+        "n- (open ended range), "
+        "* (all columns)"
+    )
+)
+p.add_argument(
+    "-d",
+    metavar="DELIMITER",
+    dest="delimiter",
+    help="output delimiter"
+)
+p.add_argument(
+    "-i",
+    dest="ignore_errors",
+    action="store_true",
+    help="ignore occurrences of DELIMITER in column values"
+)
+p.add_argument(
+    "files",
+    type=open,
+    nargs="*",
+    help="input files, or stdin if none given"
+)
+
+args = p.parse_args(sys.argv[1:])
+args.columns = parse_columns_specification(",".join(args.columns))
+if len(args.files) == 0: args.files = [sys.stdin]
+
+if args.delimiter == None: writer = csv.writer(sys.stdout)
+
+for file in args.files:
+    for row in csv.reader(file):
+        r = []
+        for i, j in args.columns:
+            assert i < len(row) and (j == None or j <= len(row)),\
+                "column reference exceeds number of columns"
+            r.extend(row[i:j])
+        if args.delimiter == None:
+            writer.writerow(r)
+        else:
+            if not args.ignore_errors:
+                assert not any(args.delimiter in v for v in r),\
+                    "delimiter occurs in column value"
+            sys.stdout.write(args.delimiter.join(r) + "\n")
