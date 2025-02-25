@@ -23,7 +23,7 @@ def parse_columns_specification(s):
     def parse(spec):
         if spec == "*": spec = "1-"
         try:
-            m = re.match("(\d+)(-(\d+)?)?$", spec)
+            m = re.match(r"(\d+)(-(\d+)?)?$", spec)
             i = int(m.group(1))
             assert i > 0
             if m.group(2) == None:
